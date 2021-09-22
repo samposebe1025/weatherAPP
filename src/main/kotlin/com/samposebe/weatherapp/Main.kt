@@ -5,24 +5,23 @@ package com.samposebe.weatherapp
 import com.samposebe.weatherapp.data.WeatherResponse
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody
-import okhttp3.MediaType
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
+import okhttp3.*
 import java.io.FileWriter
 import java.io.IOException
+import java.net.SocketTimeoutException
+import java.util.concurrent.TimeUnit
 
-val LATITUDE_MAX =  90.0
-val LATITUDE_MIN = -90.0
 
-val LONGITUDE_MAX =  180.0
-val LONGITUDE_MIN = -180.0
+const val LATITUDE_MAX =  90.0
+const val LATITUDE_MIN = -90.0
 
-var client: OkHttpClient = OkHttpClient()
-val JSON: MediaType = "application/json; charset=utf-8".toMediaType()
+const val LONGITUDE_MAX =  180.0
+const val LONGITUDE_MIN = -180.0
+
+val moshi: Moshi = Moshi.Builder().build()
+val adapter: JsonAdapter<WeatherResponse> = moshi.adapter(WeatherResponse::class.java)
+
+var error:String? = null
 
 fun getopt(args: Array<String>): Map<String, String>
 {
@@ -48,101 +47,104 @@ fun getopt(args: Array<String>): Map<String, String>
 }
 
 
-val moshi: Moshi = Moshi.Builder().build()
-val adapter: JsonAdapter<WeatherResponse> = moshi.adapter(WeatherResponse::class.java)
-
-
-@Throws(IOException::class)
-fun post(url: String, json: String): String? {
-    val body: RequestBody = json.toRequestBody(JSON)
-    val request: Request = Request.Builder()
-        .url(url)
-        .post(body)
-        .build()
-    client.newCall(request).execute().use { response -> return response.body?.string() }
-}
-
 fun getTemp(lat: String,
         lon: String,
-        appID: String): String? {
-    var result: String? = null
+        appID: String):String? {
+
+    var result: String? = Errors.RESPONSE.err
+
     val request = Request.Builder()
         .url("http://api.openweathermap.org/data/2.5/weather?lat=$lat&lon=$lon&appid=$appID")
         .build()
 
-    client.newCall(request).execute().use { response ->
-        if (!response.isSuccessful) throw IOException("Unexpected code $response")
+    val client: OkHttpClient = OkHttpClient.Builder()
+        .readTimeout(50, TimeUnit.MILLISECONDS)
+        .build()
 
-/*        for ((name, value) in response.headers) {
-            println("$name: $value")
-        }*/
-        val responseString = response.body!!.string()
-        if (response.body != null){
-            val weatherResponse = adapter.fromJson(responseString)
-            if (weatherResponse != null) {
-               if (weatherResponse.main.temp != null) {
-                   val temp = weatherResponse.main.temp - 273.15
-                   result = "Temperature = $temp °С"
-                   println(result)
-               }
+    try{
+        client.newCall(request).execute().use{ request ->
+            //if (!request.isSuccessful) throw IOException("Unexpected code $response")
+            val a = request.body
+            if (a != null){
+                val responseString = a.string()
+                val weatherResponse = adapter.fromJson(responseString)
+                if (weatherResponse != null) {
+                    if (weatherResponse.main != null) {
+                        if (weatherResponse.main.temp != null) {
+                            val temp = (weatherResponse.main.temp - 273.15).toInt().toString()
+                            result = temp//"Temperature = $temp °С"
+                        }
+                    }
+                }
             }
         }
+    }catch (e: IOException){
+        result = when (e){
+            is SocketTimeoutException -> Errors.TIMEOUT.err
+            else -> Errors.CONNECTION.err
+        }
     }
+
     return result
 }
 
 fun main(args: Array<String>){
     val params = getopt(args)
     //check params
-    var checkParams = true
-    var error:String? = null
 
     var temp: String? = null
 
     if( !params.containsKey("-c") )
-        error = Errors.PARAMS.toString()
+        error = Errors.PARAMS.err
     else {
         if ( (params.size == 2 && !params.containsKey("-f")) ||
             (params.size > 2)
         )
-            error = Errors.UNSUPPORTED.toString()
+            error = Errors.UNSUPPORTED.err
     }
 
-    //check coordinates
+    //read data
     val coordinates = params["-c"]?.split(",")?.map{ it -> it.trim()}
     val latitude:Double?
     val longitude:Double?
 
     if(coordinates != null){
-        if(coordinates?.size ==2){
+        if(coordinates.size ==2){
             latitude = coordinates[0].toDoubleOrNull()
             longitude = coordinates[1].toDoubleOrNull()
             if(latitude == null || longitude == null)
-                error = Errors.COORDINATES.toString()
+                error = Errors.COORDINATES.err
             else {
                 if (latitude < LATITUDE_MIN || latitude > LATITUDE_MAX )
-                    error = Errors.LATITUDE.toString()
+                    error = Errors.LATITUDE.err
                 else if (longitude < LONGITUDE_MIN || longitude > LONGITUDE_MAX )
-                    error = Errors.LONGITUDE.toString()
-                else
+                    error = Errors.LONGITUDE.err
+                else{
                     temp = getTemp(coordinates[0],coordinates[1], System.getenv("WEATHER_API_KEY"))
+                }
             }
         } else{
-            error = Errors.COORDINATES.toString()
+            error = Errors.COORDINATES.err
         }
     } else {
-        error = Errors.COORDINATES.toString()
+        error = Errors.COORDINATES.err
     }
 
-    //TODO check file
+    var result = ""
+    if(temp != null)
+        result = temp
+    else if (error != null)
+        result = error.toString()
+    else
+        result = Errors.ERROR.err
+    println(result)
 
-    if(temp != null) {
-        try {
-            val fileWriter = FileWriter(params["-f"].toString())
-            fileWriter.write(temp)
-            fileWriter.close()
-        } catch (exception: Exception) {
-            println(exception.message)
-        }
+    try {
+        val fileWriter = FileWriter(params["-f"].toString())
+        fileWriter.write(result)
+        fileWriter.close()
+    } catch (exception: Exception) {
+        println(Errors.FILE.err)
     }
+
 }
