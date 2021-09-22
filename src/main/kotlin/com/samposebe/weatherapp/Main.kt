@@ -139,12 +139,18 @@ fun main(args: Array<String>){
         result = Errors.ERROR.err
     println(result)
 
-    try {
-        val fileWriter = FileWriter(params["-f"].toString())
-        fileWriter.write(result)
-        fileWriter.close()
-    } catch (exception: Exception) {
-        println(Errors.FILE.err)
+    if(params["-f"] != null) {
+        if(params["-f"] != "") {
+            try {
+                val fileWriter = FileWriter(params["-f"].toString())
+                fileWriter.write(result)
+                fileWriter.close()
+            } catch (exception: Exception) {
+                println(Errors.FILE.err)
+            }
+        }else
+            println(Errors.FILE.err)
     }
+
 
 }
