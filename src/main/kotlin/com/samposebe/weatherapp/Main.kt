@@ -33,8 +33,9 @@ fun getopt(args: Array<String>): Map<String, String>
                     when(s){
                         "-c", "-f" -> {
                             this[s] = ""
-                            last = s }
-                        else -> { //val<0
+                            last = s
+                        }
+                        else -> {
                             this[last] = this[last].plus(s)
                         }
                     }
@@ -45,7 +46,6 @@ fun getopt(args: Array<String>): Map<String, String>
         }
     }
 }
-
 
 fun getTemp(lat: String,
         lon: String,
@@ -58,7 +58,7 @@ fun getTemp(lat: String,
         .build()
 
     val client: OkHttpClient = OkHttpClient.Builder()
-        .readTimeout(50, TimeUnit.MILLISECONDS)
+        .readTimeout(5000, TimeUnit.MILLISECONDS)
         .build()
 
     try{
@@ -120,7 +120,13 @@ fun main(args: Array<String>){
                 else if (longitude < LONGITUDE_MIN || longitude > LONGITUDE_MAX )
                     error = Errors.LONGITUDE.err
                 else{
-                    temp = getTemp(coordinates[0],coordinates[1], System.getenv("WEATHER_API_KEY"))
+                    val key = System.getenv("WEATHER_API_KEY")
+                    if(key != null)
+                        temp = getTemp(coordinates[0],
+                            coordinates[1],
+                            System.getenv("WEATHER_API_KEY"))
+                    else
+                        error = Errors.KEY.err
                 }
             }
         } else{

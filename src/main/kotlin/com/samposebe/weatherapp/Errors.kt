@@ -6,6 +6,7 @@ enum class Errors(val err: String){
     COORDINATES("ERROR. Coordinate format is not correct"),
     LATITUDE("ERROR. Enter correct latitude"),
     LONGITUDE("ERROR. Enter correct longitude"),
+    KEY("ERROR. Key to API is missing"),
     TIMEOUT("ERROR. Timed out waiting for a response from the server"),
     CONNECTION("ERROR. Сommunication problems"),
     RESPONSE("ERROR. Incorrect server response"),
